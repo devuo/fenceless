@@ -1,0 +1,129 @@
+<?php
+
+/**
+ * @file
+ * Main file for fenceless module.
+ */
+
+define('FENCELESS_DEFAULT_WRAPPER', 'no_wrapper');
+
+/**
+ * Implements hook_form_alter().
+ */
+function fenceless_form_alter(&$form, &$form_state, $form_id) {
+  if (!empty($form_state['pane']) && $form_state['pane']->type == 'entity_field') {
+    fenceless_entity_field_content_type_formatter_options($form, $form_state, $form_id);
+  }
+}
+
+/**
+ * Implements hook_ctools_plugin_post_alter().
+ */
+function fenceless_ctools_plugin_post_alter(&$plugin, &$info) {
+  if ($plugin['name'] != 'entity_field') return;
+
+  $plugin['defaults']['fenceless_wrapper'] = FENCELESS_DEFAULT_WRAPPER;
+  $plugin['render callback'] = 'fenceless_entity_field_content_type_render';
+}
+
+/**
+ * Overrides ctools_entity_field_content_type_formatter_options().
+ *
+ * @see fenceless_form_alter().
+ */
+function fenceless_entity_field_content_type_formatter_options(&$form, &$form_state, $form_id) {
+  if ($form_state['step'] != 'step1') return;
+
+  $conf = $form_state['conf'];
+
+  $form['fenceless_wrapper'] = array(
+    '#type' => 'select',
+    '#title' => t('Wrapper markup'),
+    '#default_value' => empty($conf['fenceless_wrapper']) ? FENCELESS_DEFAULT_WRAPPER : $conf['fenceless_wrapper'],
+    '#options' => fences_get_fences_options('field'),
+    '#description' => t('Choose the HTML to use to wrap the field.'),
+    '#states' => array(
+      'visible' => array(
+        ':input[name="formatter"]' => array('value' => 'text_default')
+      )
+    )
+  );
+
+  $form['fenceless_class'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Wrapper classes'),
+    '#default_value' => empty($conf['fenceless_class']) ? '' : $conf['fenceless_class'],
+    '#states' => array(
+      'visible' => array(
+        ':input[name="formatter"]' => array('value' => 'text_default')
+      )
+    )
+  );
+
+  $form['#submit'][] = 'fenceless_entity_field_content_type_formatter_options_submit';
+}
+
+/**
+ * Submit callback for CTools entity field formatter options form.
+ *
+ * @see fenceless_entity_field_content_type_formatter_options().
+ */
+function fenceless_entity_field_content_type_formatter_options_submit(&$form, &$form_state, $form_id) {
+  $form_state['conf']['fenceless_wrapper'] = $form_state['values']['fenceless_wrapper'];
+  $form_state['conf']['fenceless_class'] = $form_state['values']['fenceless_class'];
+}
+
+/**
+ * CTools entity-field content-type plugin render callback override.
+ *
+ * @see ctools_entity_field_content_type_render().
+ * @see fenceless_ctools_plugin_post_alter().
+ */
+function fenceless_entity_field_content_type_render($subtype, $conf, $panel_args, $context) {
+
+  if (empty($conf['formatter_settings'])) {
+    $conf['formatter_settings'] = array();
+  }
+
+  $conf['formatter_settings'] += array(
+    'fenceless_wrapper' => empty($conf['fenceless_wrapper']) ? '' : $conf['fenceless_wrapper'],
+    'fenceless_class' => empty($conf['fenceless_class']) ? '' : $conf['fenceless_class']
+  );
+
+  return ctools_entity_field_content_type_render($subtype, $conf, $panel_args, $context);
+}
+
+/**
+ * Implements hook_field_attach_view_alter().
+ */
+function fenceless_field_attach_view_alter(&$output, $context) {
+  if (empty($context['display']['settings']['fenceless_wrapper'])) return;
+
+  $settings = $context['display']['settings'];
+
+  foreach ($output as &$field) {
+    $field['fenceless_wrapper'] = $settings['fenceless_wrapper'];
+    $field['fenceless_class'] = $settings['fenceless_class'];
+  }
+}
+
+/**
+ * Implements hook_preprocess_field().
+ */
+function fenceless_preprocess_field(&$variables) {
+  $element = $variables['element'];
+
+  if (empty($element['fenceless_wrapper'])) return;
+  if ($element['fenceless_wrapper'] == FENCELESS_DEFAULT_WRAPPER) return;
+
+  // Set the fences theme suggestion from the fenceless configuration.
+  $suggestion = 'field__fences_' . $element['fenceless_wrapper'];
+
+  // Ensure the suggestion is loaded in the theme registry.
+  theme_get_registry(FALSE)->offsetGet($suggestion);
+
+  $variables['theme_hook_suggestions'][] = $suggestion;
+
+  // Set the element classes.
+  $variables['classes_array'][] = $element['fenceless_class'];
+}

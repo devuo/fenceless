@@ -1,0 +1,5 @@
+name = Fenceless
+description = Improves fences module integration with CTools module
+core = 7.x
+
+dependencies[] = fences
